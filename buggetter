@@ -1,0 +1,128 @@
+#!/usr/bin/env python3
+import sys
+import bugzilla
+from argparse import ArgumentParser
+from os import system
+from launchpadlib.launchpad import Launchpad
+
+if sys.platform != 'win32':
+    clean = 'clear'
+else:
+    clean = 'cls'
+
+parser = ArgumentParser(description='This script is used to list, or create bugs for various Commercial Linux distros')
+parser.add_argument('--create', help='This option is used to create bugs', action='store_true')
+parser.add_argument('--os',help='This option is used with --create to specify the OS. Options for this parameter are SUSE, RedHat, and Ubuntu.')
+parser.add_argument('--summary', help='This option is used in combination with --create to supply the summary of the bug', nargs=1, type=str)
+parser.add_argument('--description', help='This option is used in combination with --create to supply the description of the bug', nargs=1, type=str)
+parser.add_argument('--product', help='This option is used in combination with --create to supply the product of the bug', nargs='+', type=str)
+parser.add_argument('--version', help='This option is used in combination with --create to supply the version of the product', nargs=1, type=str)
+parser.add_argument('--username', help='This option is only for if Ubuntu is selected as the operating system.', nargs=1, type=str)
+parser.add_argument('-l', help='This option is used to list bugs')
+args = parser.parse_args()
+if args.create and (args.os is None and args.summary is None and args.description is None and args.product is None and args.version is None):
+    parser.error('--create requires --summary, --description, --product, and --version arguments.')
+if args.l and args.create:
+    parser.error('You cannot select both -l and --create at the same time')
+
+def usage():
+    system(clean)
+    print('To use this option you must follow the -l argument with the distro you wish to list.\n\nCurrent options are redhat, suse, ubuntu')
+
+class ububugz():
+    def ubuLogin(username):
+        lp = Launchpad.login(username)
+
+    def listUbuBugs():
+        print('Ubuntu is currently unsupported.')
+
+class rhelbugz():
+    def listRhelBugz():
+        rhelUrl = 'https://bugzilla.redhat.com'
+        rhelBzapi = bugzilla.Bugzilla(rhelUrl)
+        rhelQuery = rhelBzapi.url_to_query("https://bugzilla.redhat.com/buglist.cgi?bug_status=NEW&component=ec2-images&list_id=12901164&query_format=advanced")
+        rhelQuery["include_fields"] = ["id", "summary", "status"]
+        rhelBugs = rhelBzapi.query(rhelQuery)
+        system('clear')
+        for bug in rhelBugs:
+            print(f'URL: {bug.weburl}\nID: {bug.id}:{bug.summary}\nStatus: {bug.status}\n')
+    def rhelLogin():
+        rhelUrl = 'https://bugzilla.redhat.com'
+        rhelBzapi = bugzilla.Bugzilla(rhelUrl)
+        rhelBzapi.interactive_login()
+    def rhelCreate(**kwargs):
+        product = kwargs.get('Product')
+        summary = kwargs.get('Summary')
+        description = kwargs.get('Description')
+        version = kwargs.get('Version')
+        rhelUrl = 'https://bugzilla.redhat.com'
+        rhelBzapi = bugzilla.Bugzilla(rhelUrl)
+        createinfo = rhelBzapi.build_createbug(
+            product = product,
+            component = "ec2-images",
+            summary = summary,
+            description = description,
+            version = version)
+        newbug = rhelBzapi.createbug(createinfo)
+        system(clean)
+        print(f'Your new bug ID is: {newbug.id}')
+class susebugz():
+    def listSuseBugz():
+        suseUrl = 'https://bugzilla.suse.com'
+        suseBzapi = bugzilla.Bugzilla(suseUrl)
+        suseQuery = suseBzapi.build_query(component='Amazon EC2')
+        suseQuery["include_fields"] = ["id", "summary", "status"]
+        suseBugs = suseBzapi.query(suseQuery)
+        for bug in suseBugs:
+            if bug.status != 'RESOLVED' and bug.status != 'CONFIRMED':
+                print(f'URL: {bug.weburl}\nID: {bug.id}:{bug.summary}\nStatus: {bug.status}\n')
+    def suseLogin():
+        suseUrl = 'https://bugzilla.suse.com'
+        suseBzapi = bugzilla.Bugzilla(suseUrl)
+        suseBzapi.interactive_login()
+
+def _list_bugs_():
+    try:
+        option = str(sys.argv[2])
+
+        if not option:
+            usage()
+
+        if option.lower() == 'redhat' or option.lower() == 'rhel':
+            try:
+                system(clean)
+                rhelbugz.listRhelBugz()
+            except:
+                print('You need to be logged in to perform this action. Please login.')
+                rhelbugz.rhelLogin()
+                system(clean)
+                rhelbugz.listRhelBugz()
+
+        elif option.lower() == 'suse':
+            try:
+                system(clean)
+                susebugz.listSuseBugz()
+            except:
+                susebugz.suseLogin()
+                system(clean)
+                susebugz.listSuseBugz()
+        elif option.lower() == 'ubuntu':
+            try:
+                system(clean)
+                ububugz.listUbuBugs()
+            except:
+                system(clean)
+                ububugz.listUbuBugs()
+        else:
+            usage()
+    except IndexError:
+        usage()
+
+if args.l is not None:
+    _list_bugs_()
+elif args.create is not None and args.os.lower() == 'redhat':
+    try:
+        rhelbugz.rhelCreate(Product=' '.join(args.product), Summary=args.summary, Description=args.description, Version=args.version)
+    except:
+        rhelbugz.rhelLogin()
+        rhelbugz.rhelCreate(Product=' '.join(args.product), Summary=args.summary, Description=args.description, Version=args.version)
